@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>InfraTrack Enterprise Dashboard</title>
+
+<style>
+body{font-family:Arial;margin:40px;background:#f4f6f9}
+h1{color:#333}
+input,button{padding:8px;margin:5px}
+button{background:#2c3e50;color:white;border:none;cursor:pointer}
+button:hover{background:#1a242f}
+
+table{border-collapse:collapse;width:100%;background:white;margin-top:20px}
+th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}
+th{background:#2c3e50;color:white}
+
+.card{background:white;padding:20px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);margin-bottom:20px}
+.stats{display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap}
+.statCard{background:white;padding:15px 25px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+
+.progressInput{width:70px;}
+
+.Completed{color:green;font-weight:bold}
+.Delayed{color:red;font-weight:bold}
+.OnTrack{color:orange;font-weight:bold}
+.OverBudget{color:darkred;font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<h1>InfraTrack Enterprise Dashboard</h1>
+<button onclick="logout()">Logout</button>
+
+<div id="stats" class="stats"></div>
+
+<div class="card">
+<h3>Add Project</h3>
+
+<input id="name" placeholder="Project Name">
+<input id="contractor" placeholder="Contractor">
+<input id="location" placeholder="Location">
+<input id="deadline" type="date">
+<input id="budget" type="number" placeholder="Budget">
+<input id="spent" type="number" placeholder="Spent">
+
+<button onclick="createProject()">Create Project</button>
+</div>
+
+<input id="search" placeholder="Search..." oninput="loadProjects()">
+
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Name</th>
+<th>Contractor</th>
+<th>Location</th>
+<th>Deadline</th>
+<th>Budget</th>
+<th>Spent</th>
+<th>Remaining</th>
+<th>Progress</th>
+<th>Status</th>
+<th>Risk</th>
+<th>Actions</th>
+</tr>
+</thead>
+
+<tbody id="tableBody"></tbody>
+</table>
+
+<script>
+
+const API="http://127.0.0.1:8000"
+const token=localStorage.getItem("token")
+let editingId=null
+
+if(!token){ window.location="login.html" }
+
+function logout(){
+ localStorage.removeItem("token")
+ window.location="login.html"
+}
+
+const tableBody=document.getElementById("tableBody")
+const stats=document.getElementById("stats")
+
+function renderStats(projects){
+
+let totalBudget=0
+let totalSpent=0
+let completed=0
+let delayed=0
+let overBudget=0
+
+projects.forEach(p=>{
+ totalBudget+=p.budget
+ totalSpent+=p.spent
+ if(p.status=="Completed") completed++
+ if(p.status=="Delayed") delayed++
+ if(p.status=="Over Budget") overBudget++
+})
+
+stats.innerHTML=`
+<div class="statCard">Total Projects<br><b>${projects.length}</b></div>
+<div class="statCard">Total Budget<br><b>$${totalBudget}</b></div>
+<div class="statCard">Total Spent<br><b>$${totalSpent}</b></div>
+<div class="statCard">Remaining<br><b>$${totalBudget-totalSpent}</b></div>
+<div class="statCard">Completed<br><b>${completed}</b></div>
+<div class="statCard">Delayed<br><b>${delayed}</b></div>
+<div class="statCard">Over Budget<br><b>${overBudget}</b></div>
+`
+}
+
+async function loadProjects(){
+
+if(editingId!==null) return
+
+const res=await fetch(API+"/projects",{
+ headers:{Authorization:"Bearer "+token}
+})
+
+const data=await res.json()
+renderStats(data)
+
+const search=document.getElementById("search").value.toLowerCase()
+tableBody.innerHTML=""
+
+data
+.filter(p =>
+ p.name.toLowerCase().includes(search) ||
+ p.contractor.toLowerCase().includes(search) ||
+ p.location.toLowerCase().includes(search)
+)
+.forEach(p=>{
+
+tableBody.innerHTML+=`
+<tr>
+
+<td>${p.id}</td>
+
+<td><span id="name-${p.id}">${p.name}</span></td>
+<td><span id="contractor-${p.id}">${p.contractor}</span></td>
+<td><span id="location-${p.id}">${p.location}</span></td>
+<td><span id="deadline-${p.id}">${p.deadline}</span></td>
+<td><span id="budget-${p.id}">${p.budget}</span></td>
+<td><span id="spent-${p.id}">${p.spent}</span></td>
+<td>$${p.remaining}</td>
+
+<td>
+<input class="progressInput" id="prog-${p.id}" type="number" value="${p.progress}">
+<button onclick="updateProgress(${p.id})">Save</button>
+</td>
+
+<td class="${p.status.replace(" ","")}">${p.status}</td>
+<td>${p.risk}</td>
+
+<td>
+<button onclick="enableEdit(${p.id}, this)">Edit</button>
+<button onclick="deleteProject(${p.id})">Delete</button>
+</td>
+
+</tr>`
+})
+}
+
+async function createProject(){
+
+const project={
+ name:document.getElementById("name").value,
+ contractor:document.getElementById("contractor").value,
+ location:document.getElementById("location").value,
+ deadline:document.getElementById("deadline").value,
+ budget:Number(document.getElementById("budget").value),
+ spent:Number(document.getElementById("spent").value)
+}
+
+const res=await fetch(API+"/projects",{
+ method:"POST",
+ headers:{
+  "Content-Type":"application/json",
+  Authorization:"Bearer "+token
+ },
+ body:JSON.stringify(project)
+})
+
+if(!res.ok){
+ alert(await res.text())
+ return
+}
+
+loadProjects()
+}
+
+async function updateProgress(id){
+
+const value=document.getElementById("prog-"+id).value
+
+await fetch(API+"/projects/"+id,{
+ method:"PUT",
+ headers:{
+  "Content-Type":"application/json",
+  Authorization:"Bearer "+token
+ },
+ body:JSON.stringify({progress:Number(value)})
+})
+
+loadProjects()
+}
+
+async function deleteProject(id){
+
+if(!confirm("Delete project?")) return
+
+await fetch(API+"/projects/"+id,{
+ method:"DELETE",
+ headers:{Authorization:"Bearer "+token}
+})
+
+loadProjects()
+}
+
+function enableEdit(id, button){
+
+editingId=id
+
+const fields=["name","contractor","location","deadline","budget","spent"]
+
+fields.forEach(field=>{
+const el=document.getElementById(field+"-"+id)
+el.innerHTML=`<input id="edit-${field}-${id}" value="${el.innerText}">`
+})
+
+button.innerText="Save"
+button.onclick=function(){ saveEdit(id) }
+}
+
+async function saveEdit(id){
+
+const updated={
+ name:document.getElementById(`edit-name-${id}`).value,
+ contractor:document.getElementById(`edit-contractor-${id}`).value,
+ location:document.getElementById(`edit-location-${id}`).value,
+ deadline:document.getElementById(`edit-deadline-${id}`).value,
+ budget:Number(document.getElementById(`edit-budget-${id}`).value),
+ spent:Number(document.getElementById(`edit-spent-${id}`).value)
+}
+
+await fetch(API+"/projects/"+id,{
+ method:"PUT",
+ headers:{
+  "Content-Type":"application/json",
+  Authorization:"Bearer "+token
+ },
+ body:JSON.stringify(updated)
+})
+
+editingId=null
+loadProjects()
+}
+
+loadProjects()
+setInterval(loadProjects,5000)
+
+</script>
+</body>
+</html>
