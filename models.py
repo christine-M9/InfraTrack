@@ -37,3 +37,19 @@ class Project(Base):
 
     directorate = relationship("Directorate", back_populates="projects")
     contractor = relationship("Contractor", back_populates="projects")
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True)
+    password = Column(String)
+    role = Column(String)  # Admin, Engineer, Auditor    
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True)
+    action = Column(String)
+    user = Column(String)
+    timestamp = Column(String)    

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KeNHA IMS - Contractor Projects</title>
+    <link rel="stylesheet" href="/static/layout.css">
+    <style>
+        .container { padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #0f766e; color: white; }
+        tr:nth-child(even) { background: #f2f2f2; }
+        .button { padding: 5px 10px; background: #0f766e; color: white; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; }
+        .button:hover { background: #07554f; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <h2>KeNHA IMS</h2>
+    <a href="/">Dashboard</a>
+    <a href="/projects-page">Projects</a>
+    <a href="/directorates-page">Directorates</a>
+    <a href="/contractors-page">Contractors</a>
+    <a href="/reports-page">Reports</a>
+</div>
+
+<div class="topbar">
+    <h3 id="pageTitle">Contractor Projects</h3>
+    <a href="/contractors-page" class="button">Back to Contractors</a>
+</div>
+
+<div class="container">
+    <table>
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Budget</th>
+                <th>Spent</th>
+                <th>Progress</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search)
+const contractorId = params.get("id")
+const contractorName = params.get("name")
+
+document.getElementById("pageTitle").innerText = `Projects for ${contractorName}`
+
+async function loadProjects(){
+    const res = await fetch("/projects")
+    const projects = await res.json()
+    const filtered = projects.filter(p => p.contractor_id == contractorId)
+    const tbody = document.getElementById("tableBody")
+    tbody.innerHTML = ""
+    filtered.forEach(p=>{
+        tbody.innerHTML += `
+            <tr>
+                <td>${p.name}</td>
+                <td>${p.budget.toLocaleString()}</td>
+                <td>${p.spent.toLocaleString()}</td>
+                <td>${p.progress.toFixed(1)}%</td>
+                <td>${p.status}</td>
+            </tr>
+        `
+    })
+}
+
+loadProjects()
+</script>
+</body>
+</html>

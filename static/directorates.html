@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Directorates</title>
+<title>KeNHA IMS - Directorates</title>
 <link rel="stylesheet" href="/static/layout.css">
 </head>
 <body>
@@ -16,7 +16,7 @@
 </div>
 
 <div class="topbar">
-<h3>Directorates</h3>
+<h3>Directorates Overview</h3>
 </div>
 
 <div class="container">
@@ -32,7 +32,7 @@
 <tr>
 <th>Name</th>
 <th>Projects</th>
-<th>Total Budget</th>
+<th>Total Budget (KES)</th>
 <th>Completion %</th>
 <th>Status</th>
 </tr>
@@ -53,19 +53,17 @@ tableBody.innerHTML = ""
 data.forEach(d => {
 
 let statusBadge = ""
-let rowClass = ""
 
 if(d.has_delayed){
-    statusBadge = "<span style='color:red;font-weight:bold;'>Delayed</span>"
-    rowClass = "style='background:#ffe5e5'"
+statusBadge = "<span class='badge badge-danger'>Delayed</span>"
 }else{
-    statusBadge = "<span style='color:green;'>Healthy</span>"
+statusBadge = "<span class='badge badge-success'>Healthy</span>"
 }
 
 tableBody.innerHTML += `
-<tr ${rowClass}>
+<tr>
 <td>
-<a href="/directorate-projects-page?id=${d.id}">
+<a href="/directorate-projects-page?id=${d.id}" style="text-decoration:none;color:#1d4ed8;font-weight:600;">
 ${d.name}
 </a>
 </td>
@@ -78,7 +76,21 @@ ${d.name}
 })
 }
 
+async function createDirectorate(){
+const name = document.getElementById("dname").value
+
+await fetch("/directorates",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({name:name})
+})
+
+document.getElementById("dname").value=""
 loadDirectorates()
+}
+
+loadDirectorates()
+
 </script>
 
 </body>

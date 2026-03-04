@@ -1,91 +1,99 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Contractors</title>
-<link rel="stylesheet" href="/static/layout.css">
+    <title>KeNHA IMS - Contractors</title>
+    <link rel="stylesheet" href="/static/layout.css">
+    <style>
+        .container { padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { cursor: pointer; background: #0f766e; color: white; }
+        tr:nth-child(even) { background: #f2f2f2; }
+        .button { padding: 5px 10px; background: #0f766e; color: white; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; }
+        .button:hover { background: #07554f; }
+    </style>
 </head>
 <body>
-
 <div class="sidebar">
-<h2>KeNHA IMS</h2>
-<a href="/">Dashboard</a>
-<a href="/projects-page">Projects</a>
-<a href="/directorates-page">Directorates</a>
-<a href="/contractors-page">Contractors</a>
-<a href="/reports-page">Reports</a>
+    <h2>KeNHA IMS</h2>
+    <a href="/">Dashboard</a>
+    <a href="/projects-page">Projects</a>
+    <a href="/directorates-page">Directorates</a>
+    <a href="/contractors-page">Contractors</a>
+    <a href="/reports-page">Reports</a>
 </div>
 
 <div class="topbar">
-<h3>Contractors</h3>
+    <h3>Contractors</h3>
 </div>
 
 <div class="container">
+    <div class="card">
+        <input type="text" id="searchInput" placeholder="Search contractor..." onkeyup="applyFilters()">
+    </div>
 
-<div class="card">
-<h3>Add Contractor</h3>
-<input id="cname" placeholder="Contractor Name">
-<input id="contact" placeholder="Contact Info">
-<button onclick="createContractor()">Create</button>
-</div>
-
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Contact</th>
-<th>Total Projects</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody id="contractorTable"></tbody>
-</table>
-
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th onclick="sortTable('name')">Name</th>
+                    <th onclick="sortTable('contact')">Contact</th>
+                    <th onclick="sortTable('project_count')">Total Projects</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
 </div>
 
 <script>
+let allContractors = []
+let sortDirection = 1
 
 async function loadContractors(){
-const res = await fetch("/contractors")
-const data = await res.json()
-
-contractorTable.innerHTML=""
-
-data.forEach(c=>{
-contractorTable.innerHTML+=`
-<tr>
-<td>${c.name}</td>
-<td>${c.contact}</td>
-<td>${c.project_count || 0}</td>
-<td><button onclick="deleteContractor(${c.id})">Delete</button></td>
-</tr>`
-})
+    const res = await fetch("/contractors")
+    allContractors = await res.json()
+    applyFilters()
 }
 
-async function createContractor(){
-const contractor={
-name:document.getElementById("cname").value,
-contact:document.getElementById("contact").value
+function applyFilters(){
+    const search = document.getElementById("searchInput").value.toLowerCase()
+    const filtered = allContractors.filter(c => 
+        c.name.toLowerCase().includes(search) ||
+        (c.contact && c.contact.toLowerCase().includes(search))
+    )
+    renderTable(filtered)
 }
 
-await fetch("/contractors",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify(contractor)
-})
+function renderTable(data){
+    const tbody = document.getElementById("tableBody")
+    tbody.innerHTML = ""
+    data.forEach(c=>{
+        tbody.innerHTML += `
+            <tr>
+                <td>${c.name}</td>
+                <td>${c.contact || "N/A"}</td>
+                <td>${c.project_count}</td>
+                <td>
+                    <a class="button" href="/contractor-projects-page?id=${c.id}&name=${encodeURIComponent(c.name)}">View Projects</a>
+                </td>
+            </tr>
+        `
+    })
+}
 
-document.getElementById("cname").value=""
-document.getElementById("contact").value=""
+function sortTable(field){
+    sortDirection *= -1
+    allContractors.sort((a,b)=>{
+        if(a[field]<b[field]) return -1*sortDirection
+        if(a[field]>b[field]) return 1*sortDirection
+        return 0
+    })
+    applyFilters()
+}
+
 loadContractors()
-}
-
-async function deleteContractor(id){
-await fetch("/contractors/"+id,{method:"DELETE"})
-loadContractors()
-}
-
-loadContractors()
-
 </script>
-
 </body>
 </html>

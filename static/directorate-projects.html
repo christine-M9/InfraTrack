@@ -1,8 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Directorate Projects</title>
-<link rel="stylesheet" href="layout.css">
+<title>KeNHA IMS - Directorate Projects</title>
+<link rel="stylesheet" href="/static/layout.css">
+<style>
+.progress-bar { width:100%; background:#e2e8f0; border-radius:8px; overflow:hidden; height:15px; margin-bottom:5px; }
+.progress-fill { height:100%; background:#0f766e; }
+.modal { display:none; position:fixed; z-index:999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); }
+.modal-content { background:white; margin:10% auto; padding:20px; width:400px; border-radius:12px; }
+.close { float:right; cursor:pointer; font-size:20px; font-weight:bold; }
+.badge-warning { background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600; }
+.badge-success { background:#d1fae5;color:#065f46;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600; }
+.badge-danger { background:#fee2e2;color:#b91c1c;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600; }
+</style>
 </head>
 <body>
 
@@ -14,115 +24,129 @@
 <a href="/contractors-page">Contractors</a>
 <a href="/reports-page">Reports</a>
 </div>
+
 <div class="topbar">
-<h3 id="directorateTitle">Directorate Overview</h3>
+<h3>Directorate Performance Analytics</h3>
+<button onclick="exportExcel()">Export to Excel</button>
 </div>
 
 <div class="container">
 
-<!-- SUMMARY CARDS -->
+<div class="card">
+<input type="text" id="searchInput" placeholder="Search project..." onkeyup="applyFilters()">
+<select id="statusFilter" onchange="applyFilters()">
+<option value="All">All Status</option>
+<option value="Active">Active</option>
+<option value="Completed">Completed</option>
+<option value="Delayed">Delayed</option>
+</select>
+</div>
+
 <div class="card-grid">
-<div class="card">
-<h4>Total Projects</h4>
-<p id="totalProjects">0</p>
+<div class="card"><h4>Total Projects</h4><p id="totalProjects">0</p></div>
+<div class="card"><h4>Total Budget (KES)</h4><p id="totalBudget">0</p></div>
+<div class="card"><h4>Completion</h4><p id="completionPercent">0%</p></div>
+<div class="card"><h4>Average Variance %</h4><p id="avgVariance">0%</p></div>
 </div>
 
 <div class="card">
-<h4>Total Budget</h4>
-<p id="totalBudget">0</p>
-</div>
-
-<div class="card">
-<h4>Completion</h4>
-<p id="completionPercent">0%</p>
-</div>
-</div>
-
-<!-- PROJECT TABLE -->
-<div class="card">
-<h3>Projects</h3>
-
-<table class="styled-table">
+<table>
 <thead>
 <tr>
-<th>Name</th>
-<th>Budget</th>
-<th>Spent</th>
+<th onclick="sortTable('name')">Project</th>
+<th onclick="sortTable('contractor_name')">Contractor</th>
+<th onclick="sortTable('budget')">Budget</th>
+<th onclick="sortTable('spent')">Spent</th>
+<th>Variance %</th>
 <th>Progress</th>
+<th>Risk</th>
 <th>Status</th>
 </tr>
 </thead>
 <tbody id="tableBody"></tbody>
 </table>
+</div>
 
 </div>
 
+<div id="projectModal" class="modal">
+<div class="modal-content">
+<span class="close" onclick="closeModal()">&times;</span>
+<h3 id="modalTitle"></h3>
+<p id="modalDetails"></p>
+</div>
 </div>
 
 <script>
-
 const params = new URLSearchParams(window.location.search)
-const id = params.get("id")
+const directorateId = params.get("id")
+let allProjects=[], sortDirection=1
 
 async function loadProjects(){
-
-const res = await fetch("/projects")
-const projects = await res.json()
-
-const filtered = projects.filter(p => p.directorate_id == id)
-
-let totalBudget = 0
-let totalSpent = 0
-
-tableBody.innerHTML = ""
-
-filtered.forEach(p=>{
-
-totalBudget += p.budget
-totalSpent += p.spent
-
-let statusClass = "status-green"
-let status = "Healthy"
-
-if(p.spent > p.budget){
-status = "Over Budget"
-statusClass = "status-red"
+    const [projects, contractors] = await Promise.all([
+        fetch("/projects").then(r=>r.json()),
+        fetch("/contractors").then(r=>r.json())
+    ])
+    const contractorMap = {}
+    contractors.forEach(c=>contractorMap[c.id]=c.name)
+    allProjects = projects
+        .filter(p=>p.directorate_id==directorateId)
+        .map(p=>({...p, contractor_name:contractorMap[p.contractor_id]||"N/A"}))
+    applyFilters()
 }
 
-tableBody.innerHTML += `
-<tr>
-<td>${p.name}</td>
-<td>${p.budget.toLocaleString()}</td>
-<td>${p.spent.toLocaleString()}</td>
-<td>
-<div class="progress-bar">
-<div class="progress-fill" style="width:${p.progress}%"></div>
-</div>
-${p.progress.toFixed(1)}%
-</td>
-<td class="${statusClass}">
-${status}
-</td>
-</tr>
-`
-})
-
-document.getElementById("totalProjects").innerText = filtered.length
-document.getElementById("totalBudget").innerText = totalBudget.toLocaleString()
-
-let completion = 0
-if(totalBudget > 0){
-completion = (totalSpent / totalBudget) * 100
+function applyFilters(){
+    const search = document.getElementById("searchInput").value.toLowerCase()
+    const status = document.getElementById("statusFilter").value
+    const filtered = allProjects.filter(p=>p.name.toLowerCase().includes(search) && (status=="All"||p.status==status))
+    renderTable(filtered)
 }
 
-document.getElementById("completionPercent").innerText =
-completion.toFixed(1) + "%"
-
+function renderTable(data){
+    let totalBudget=0,totalSpent=0,totalVariance=0
+    tableBody.innerHTML=""
+    data.forEach(p=>{
+        totalBudget+=p.budget
+        totalSpent+=p.spent
+        let variance=((p.spent-p.budget)/p.budget)*100
+        variance=isFinite(variance)?variance:0
+        totalVariance+=variance
+        let risk="Low", riskClass="badge-success"
+        if(variance>20){risk="High"; riskClass="badge-danger"}
+        else if(variance>5){risk="Medium"; riskClass="badge-warning"}
+        tableBody.innerHTML+=`
+        <tr onclick="openModal('${p.name}',${p.budget},${p.spent},'${p.status}','${p.contractor_name}')">
+        <td>${p.name}</td>
+        <td>${p.contractor_name}</td>
+        <td>${p.budget.toLocaleString()}</td>
+        <td>${p.spent.toLocaleString()}</td>
+        <td>${variance.toFixed(1)}%</td>
+        <td><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(p.progress,100)}%"></div></div>${p.progress.toFixed(1)}%</td>
+        <td><span class="badge ${riskClass}">${risk}</span></td>
+        <td>${p.status}</td>
+        </tr>`
+    })
+    document.getElementById("totalProjects").innerText=data.length
+    document.getElementById("totalBudget").innerText=totalBudget.toLocaleString()
+    document.getElementById("completionPercent").innerText=totalBudget>0?((totalSpent/totalBudget)*100).toFixed(1)+"%":"0%"
+    document.getElementById("avgVariance").innerText=data.length>0?(totalVariance/data.length).toFixed(1)+"%":"0%"
 }
 
+function sortTable(field){
+    sortDirection*=-1
+    allProjects.sort((a,b)=>{if(a[field]<b[field])return -1*sortDirection;if(a[field]>b[field])return 1*sortDirection;return 0})
+    applyFilters()
+}
+
+function openModal(name,budget,spent,status,contractor){
+    document.getElementById("modalTitle").innerText=name
+    document.getElementById("modalDetails").innerHTML=`Contractor: ${contractor}<br>Budget: ${budget.toLocaleString()}<br>Spent: ${spent.toLocaleString()}<br>Status: ${status}`
+    document.getElementById("projectModal").style.display="block"
+}
+
+function closeModal(){document.getElementById("projectModal").style.display="none"}
+function exportExcel(){window.location.href=`/directorates/${directorateId}/export`}
 loadProjects()
-
 </script>
-
 </body>
 </html>
