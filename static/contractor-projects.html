@@ -14,14 +14,7 @@
     </style>
 </head>
 <body>
-<div class="sidebar">
-    <h2>KeNHA IMS</h2>
-    <a href="/">Dashboard</a>
-    <a href="/projects-page">Projects</a>
-    <a href="/directorates-page">Directorates</a>
-    <a href="/contractors-page">Contractors</a>
-    <a href="/reports-page">Reports</a>
-</div>
+<div id="sidebar"></div>
 
 <div class="topbar">
     <h3 id="pageTitle">Contractor Projects</h3>
@@ -70,6 +63,11 @@ async function loadProjects(){
 }
 
 loadProjects()
+
+// Load the sidebar dynamically
+  fetch('/static/sidebar.html')
+    .then(response => response.text())
+    .then(html => document.getElementById('sidebar').innerHTML = html);
 </script>
 </body>
 </html>

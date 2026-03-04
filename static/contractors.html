@@ -6,94 +6,62 @@
     <style>
         .container { padding: 20px; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { cursor: pointer; background: #0f766e; color: white; }
-        tr:nth-child(even) { background: #f2f2f2; }
-        .button { padding: 5px 10px; background: #0f766e; color: white; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; }
-        .button:hover { background: #07554f; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background: #0f766e; color: white; cursor: pointer; }
+        tr:nth-child(even){ background: #f2f2f2; }
+        .button { padding: 5px 10px; background: #0f766e; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .button:hover{ background: #07554f; }
     </style>
 </head>
 <body>
-<div class="sidebar">
-    <h2>KeNHA IMS</h2>
-    <a href="/">Dashboard</a>
-    <a href="/projects-page">Projects</a>
-    <a href="/directorates-page">Directorates</a>
-    <a href="/contractors-page">Contractors</a>
-    <a href="/reports-page">Reports</a>
-</div>
-
-<div class="topbar">
-    <h3>Contractors</h3>
-</div>
-
+<div id="sidebar"></div>
 <div class="container">
-    <div class="card">
-        <input type="text" id="searchInput" placeholder="Search contractor..." onkeyup="applyFilters()">
-    </div>
-
-    <div class="card">
-        <table>
-            <thead>
-                <tr>
-                    <th onclick="sortTable('name')">Name</th>
-                    <th onclick="sortTable('contact')">Contact</th>
-                    <th onclick="sortTable('project_count')">Total Projects</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-        </table>
-    </div>
+    <h3>Contractors</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Total Projects</th>
+                <th>View Projects</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
 </div>
 
 <script>
-let allContractors = []
-let sortDirection = 1
+if(!localStorage.getItem("token")) window.location.href="/login"
 
 async function loadContractors(){
-    const res = await fetch("/contractors")
-    allContractors = await res.json()
-    applyFilters()
-}
-
-function applyFilters(){
-    const search = document.getElementById("searchInput").value.toLowerCase()
-    const filtered = allContractors.filter(c => 
-        c.name.toLowerCase().includes(search) ||
-        (c.contact && c.contact.toLowerCase().includes(search))
-    )
-    renderTable(filtered)
-}
-
-function renderTable(data){
+    const res = await fetch("/contractors", { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
+    const contractors = await res.json()
     const tbody = document.getElementById("tableBody")
-    tbody.innerHTML = ""
-    data.forEach(c=>{
+    tbody.innerHTML=""
+    contractors.forEach(c=>{
         tbody.innerHTML += `
             <tr>
                 <td>${c.name}</td>
-                <td>${c.contact || "N/A"}</td>
+                <td>${c.contact}</td>
                 <td>${c.project_count}</td>
-                <td>
-                    <a class="button" href="/contractor-projects-page?id=${c.id}&name=${encodeURIComponent(c.name)}">View Projects</a>
-                </td>
+                <td><button class="button" onclick="viewProjects(${c.id}, '${c.name}')">View Projects</button></td>
             </tr>
         `
     })
 }
 
-function sortTable(field){
-    sortDirection *= -1
-    allContractors.sort((a,b)=>{
-        if(a[field]<b[field]) return -1*sortDirection
-        if(a[field]>b[field]) return 1*sortDirection
-        return 0
-    })
-    applyFilters()
+function viewProjects(id,name){
+    window.location.href=`/contractor-projects-page?id=${id}&name=${encodeURIComponent(name)}`
 }
 
+function logout(){ localStorage.removeItem("token"); window.location.href="/login" }
+
 loadContractors()
+
+// Load the sidebar dynamically
+  fetch('/static/sidebar.html')
+    .then(response => response.text())
+    .then(html => document.getElementById('sidebar').innerHTML = html);
 </script>
 </body>
 </html>

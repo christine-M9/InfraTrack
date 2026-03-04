@@ -3,14 +3,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from jose import jwt
+from passlib.context import CryptContext
 import models, schemas
 from database import engine, SessionLocal
 from openpyxl import Workbook
-from sklearn.linear_model import LinearRegression
-from jose import jwt
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-import numpy as np
 import io
 
 # ---------------- CREATE TABLES ----------------
@@ -43,9 +41,7 @@ def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
 
 # ---------------- AUTH HELPERS ----------------
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -78,11 +74,22 @@ def create_default_admin():
         db.commit()
     db.close()
 
+# ---------------- SCHEMAS FOR LOGIN/REGISTER ----------------
+from pydantic import BaseModel
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+
 # ---------------- LOGIN ----------------
 @app.post("/login")
-def login(username: str, password: str, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.username == username).first()
-    if not user or not verify_password(password, user.password):
+def login(data: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == data.username).first()
+    if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     token = jwt.encode(
@@ -90,53 +97,60 @@ def login(username: str, password: str, db: Session = Depends(get_db)):
         SECRET_KEY,
         algorithm=ALGORITHM
     )
-    return {"access_token": token}
+    log_action(db, data.username, "Logged in")
+    return {"access_token": token, "role": user.role}
+
+# ---------------- REGISTER ----------------
+@app.post("/register")
+def register(data: UserRegister, db: Session = Depends(get_db)):
+    if db.query(models.User).filter(models.User.username == data.username).first():
+        raise HTTPException(status_code=400, detail="Username already exists")
+    new_user = models.User(
+        username=data.username,
+        password=hash_password(data.password),
+        role="User"  # default role
+    )
+    db.add(new_user)
+    db.commit()
+    log_action(db, data.username, "Registered new account")
+    return {"message": "User registered successfully"}
 
 # ---------------- FRONTEND ROUTES ----------------
 @app.get("/")
-def dashboard():
-    return FileResponse("static/dashboard.html")
+def home():
+    return FileResponse("static/home.html")
 
-@app.get("/projects-page")
-def projects_page():
-    return FileResponse("static/projects.html")
+@app.get("/dashboard")
+def dashboard(): return FileResponse("static/dashboard.html")
+@app.get("/projects-page") 
+def projects_page(): return FileResponse("static/projects.html")
+@app.get("/directorates-page") 
+def directorates_page(): return FileResponse("static/directorates.html")
+@app.get("/contractors-page") 
+def contractors_page(): return FileResponse("static/contractors.html")
+@app.get("/reports-page") 
+def reports_page(): return FileResponse("static/reports.html")
+@app.get("/directorate-projects-page") 
+def directorate_projects_page(): return FileResponse("static/directorate-projects.html")
+@app.get("/contractor-projects-page") 
+def contractor_projects_page(): return FileResponse("static/contractor-projects.html")    
+@app.get("/audit-logs-page") 
+def audit_logs_page(): return FileResponse("static/audit-logs.html")
 
-@app.get("/directorates-page")
-def directorates_page():
-    return FileResponse("static/directorates.html")
-
-@app.get("/contractors-page")
-def contractors_page():
-    return FileResponse("static/contractors.html")
-
-@app.get("/reports-page")
-def reports_page():
-    return FileResponse("static/reports.html")
-
-@app.get("/directorate-projects-page")
-def directorate_projects_page():
-    return FileResponse("static/directorate-projects.html")
-
-# ---------------- CONTRACTORS JSON ----------------
+# ---------------- CONTRACTORS ----------------
 @app.get("/contractors")
 def get_contractors(db: Session = Depends(get_db)):
-    """
-    Returns all contractors with:
-    - id
-    - name
-    - contact
-    - total projects
-    """
     contractors = db.query(models.Contractor).all()
     result = []
     for c in contractors:
         result.append({
             "id": c.id,
             "name": c.name,
-            "contact": c.contact if hasattr(c, "contact") else "N/A",  # optional contact field
-            "project_count": len(c.projects)  # total projects linked to this contractor
+            "contact": getattr(c, "contact", "N/A"),
+            "project_count": len(c.projects)
         })
     return result
+
 # ---------------- PROJECTS ----------------
 @app.get("/projects")
 def get_projects(db: Session = Depends(get_db)):
@@ -165,31 +179,40 @@ def get_projects(db: Session = Depends(get_db)):
     return result
 
 @app.post("/projects")
-def create_project(p: schemas.ProjectCreate, db: Session = Depends(get_db)):
-    progress = (p.spent / p.budget)*100 if p.budget>0 else 0
+def create_project(p: schemas.ProjectCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if not db.query(models.Directorate).get(p.directorate_id):
+        raise HTTPException(status_code=400, detail="Invalid directorate ID")
+    if p.contractor_id and not db.query(models.Contractor).get(p.contractor_id):
+        raise HTTPException(status_code=400, detail="Invalid contractor ID")
+    
+    progress = (p.spent / p.budget)*100 if p.budget > 0 else 0
+    
     project = models.Project(
         name=p.name,
         budget=p.budget,
         spent=p.spent,
         progress=progress,
-        status=p.status,
+        status=getattr(p, "status", "Active"),  # default to Active
         directorate_id=p.directorate_id,
         contractor_id=p.contractor_id
     )
+    
     db.add(project)
     db.commit()
     db.refresh(project)
+    log_action(db, user["sub"], f"Created project {project.name} (ID {project.id})")
     return project
 
 @app.delete("/projects/{id}")
-def delete_project(id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_project(id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     if user["role"] != "Admin":
         raise HTTPException(status_code=403, detail="Admin only")
-    p = db.query(models.Project).get(id)
-    if not p: raise HTTPException(status_code=404)
-    db.delete(p)
+    project = db.query(models.Project).get(id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    db.delete(project)
     db.commit()
-    log_action(db, user["sub"], f"Deleted project {id}")
+    log_action(db, user["sub"], f"Deleted project {project.name} (ID {project.id})")
     return {"message": "Deleted"}
 
 # ---------------- DIRECTORATES ----------------
@@ -238,42 +261,11 @@ def export_directorate_excel(id:int, db: Session = Depends(get_db)):
         headers={"Content-Disposition": "attachment; filename=directorate_projects.xlsx"}
     )
 
-# ---------------- ANALYTICS ----------------
-@app.get("/directorates/{id}/analytics")
-def directorate_analytics(id:int, db: Session=Depends(get_db)):
-    projects = db.query(models.Project).filter(models.Project.directorate_id==id).all()
-    total_budget = sum(p.budget for p in projects)
-    total_spent = sum(p.spent for p in projects)
-    status_counts = {"Active":0,"Completed":0,"Delayed":0}
-    for p in projects: status_counts[p.status]+=1
-    return {"total_budget": total_budget,"total_spent":total_spent,"status_distribution":status_counts}
-
-# ---------------- CONTRACTOR RANKING ----------------
-@app.get("/contractor-ranking")
-def contractor_ranking(db: Session = Depends(get_db)):
-    contractors = db.query(models.Contractor).all()
-    ranking = []
-    for c in contractors:
-        projects = c.projects
-        if not projects: continue
-        avg_variance = sum((p.spent-p.budget)/p.budget if p.budget>0 else 0 for p in projects)/len(projects)
-        ranking.append({"contractor": c.name, "projects": len(projects), "avg_variance_percent": round(avg_variance*100,2)})
-    ranking.sort(key=lambda x: x["avg_variance_percent"])
-    return ranking
-
-# ---------------- AI PREDICT ----------------
-@app.get("/predict-overrun/{project_id}")
-def predict_overrun(project_id:int, db:Session=Depends(get_db)):
-    project = db.query(models.Project).get(project_id)
-    if not project: raise HTTPException(status_code=404)
-    X = np.array([[project.progress]])
-    y = np.array([project.spent])
-    model = LinearRegression()
-    model.fit(X, y)
-    predicted_spent = model.predict([[100]])[0]
-    overrun = predicted_spent - project.budget
-    return {"predicted_final_spent":float(predicted_spent),"predicted_overrun":float(overrun)}
-
-@app.get("/contractor-projects-page")
-def contractor_projects_page():
-    return FileResponse("static/contractor-projects.html")    
+# ---------------- AUDIT LOGS ----------------
+@app.get("/audit-logs")
+def get_audit_logs(db: Session = Depends(get_db)):
+    logs = db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).all()
+    return [
+        {"id": log.id, "user": log.user, "action": log.action, "timestamp": log.timestamp}
+        for log in logs
+    ]

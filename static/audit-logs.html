@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KeNHA IMS - Audit Logs</title>
+    <link rel="stylesheet" href="/static/layout.css">
+    <style>
+        .container { padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background: #0f766e; color: white; }
+        tr:nth-child(even){ background: #f2f2f2; }
+    </style>
+</head>
+<body>
+<div id="sidebar"></div>
+
+<div class="container">
+    <h3>Audit Logs</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Action</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+if(!localStorage.getItem("token")) window.location.href="/login"
+
+async function loadLogs(){
+    const res = await fetch("/audit-logs", { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
+    const logs = await res.json()
+    const tbody = document.getElementById("tableBody")
+    tbody.innerHTML=""
+    logs.forEach(log=>{
+        tbody.innerHTML += `
+            <tr>
+                <td>${log.user}</td>
+                <td>${log.action}</td>
+                <td>${log.timestamp}</td>
+            </tr>
+        `
+    })
+}
+
+function logout(){ localStorage.removeItem("token"); window.location.href="/login" }
+
+loadLogs()
+
+// Load the sidebar dynamically
+  fetch('/static/sidebar.html')
+    .then(response => response.text())
+    .then(html => document.getElementById('sidebar').innerHTML = html);
+</script>
+</body>
+</html>

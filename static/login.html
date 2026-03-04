@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KeNHA IMS - Login/Register</title>
+    <link rel="stylesheet" href="/static/layout.css">
+    <style>
+        body { font-family: Arial, sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; background:#f0f2f5; }
+        .container { background:white; padding:30px; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,0.1); width:300px; }
+        h2 { text-align:center; margin-bottom:20px; }
+        input { width:100%; padding:8px; margin:8px 0; border:1px solid #ccc; border-radius:5px; }
+        button { width:100%; padding:10px; background:#0f766e; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px; }
+        button:hover { background:#07554f; }
+        .toggle { text-align:center; margin-top:15px; cursor:pointer; color:#0f766e; }
+        p { text-align:center; margin-top:10px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2 id="formTitle">Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button id="submitBtn">Login</button>
+    <div class="toggle" id="toggleForm">Don't have an account? Register</div>
+    <p id="message" style="color:red;"></p>
+</div>
+
+<script>
+let isLogin = true;
+
+document.getElementById("toggleForm").addEventListener("click", ()=>{
+    isLogin = !isLogin;
+    document.getElementById("formTitle").innerText = isLogin ? "Login" : "Register";
+    document.getElementById("submitBtn").innerText = isLogin ? "Login" : "Register";
+    document.getElementById("toggleForm").innerText = isLogin ? "Don't have an account? Register" : "Already have an account? Login";
+});
+
+document.getElementById("submitBtn").addEventListener("click", async ()=>{
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+    const messageEl = document.getElementById("message");
+    messageEl.style.color = "red";
+    messageEl.innerText = "";
+
+    if(!username || !password){ messageEl.innerText="Username and password required"; return; }
+
+    try{
+        if(isLogin){
+            // LOGIN
+            const res = await fetch("/login", {
+                method:"POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({username,password})
+            });
+            const data = await res.json();
+            if(!res.ok){ messageEl.innerText = data.detail || "Login failed"; return; }
+            localStorage.setItem("token", data.access_token);
+            window.location.href = "/";  // redirect to dashboard
+        }else{
+            // REGISTER
+            const res = await fetch("/register", {
+                method:"POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({username,password})
+            });
+            const data = await res.json();
+            if(!res.ok){ messageEl.innerText = data.detail || "Registration failed"; return; }
+            messageEl.style.color = "green";
+            messageEl.innerText = "Registration successful! Please login.";
+            isLogin = true;
+            document.getElementById("toggleForm").click();
+        }
+    }catch(err){ messageEl.innerText = "Server error"; console.error(err); }
+});
+</script>
+</body>
+</html>

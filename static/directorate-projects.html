@@ -16,14 +16,7 @@
 </head>
 <body>
 
-<div class="sidebar">
-<h2>KeNHA IMS</h2>
-<a href="/">Dashboard</a>
-<a href="/projects-page">Projects</a>
-<a href="/directorates-page">Directorates</a>
-<a href="/contractors-page">Contractors</a>
-<a href="/reports-page">Reports</a>
-</div>
+<div id="sidebar"></div>
 
 <div class="topbar">
 <h3>Directorate Performance Analytics</h3>
@@ -147,6 +140,10 @@ function openModal(name,budget,spent,status,contractor){
 function closeModal(){document.getElementById("projectModal").style.display="none"}
 function exportExcel(){window.location.href=`/directorates/${directorateId}/export`}
 loadProjects()
+// Load the sidebar dynamically
+  fetch('/static/sidebar.html')
+    .then(response => response.text())
+    .then(html => document.getElementById('sidebar').innerHTML = html);
 </script>
 </body>
 </html>

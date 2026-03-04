@@ -1,7 +1,9 @@
+# models.py
 from sqlalchemy import Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
 
+# ---------------- DIRECTORATE ----------------
 class Directorate(Base):
     __tablename__ = "directorates"
 
@@ -11,16 +13,18 @@ class Directorate(Base):
     projects = relationship("Project", back_populates="directorate")
 
 
+# ---------------- CONTRACTOR ----------------
 class Contractor(Base):
     __tablename__ = "contractors"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    contact = Column(String)
+    contact = Column(String)  # <-- important to show on frontend
 
     projects = relationship("Project", back_populates="contractor")
 
 
+# ---------------- PROJECT ----------------
 class Project(Base):
     __tablename__ = "projects"
 
@@ -38,18 +42,22 @@ class Project(Base):
     directorate = relationship("Directorate", back_populates="projects")
     contractor = relationship("Contractor", back_populates="projects")
 
+
+# ---------------- USER ----------------
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
-    password = Column(String)
-    role = Column(String)  # Admin, Engineer, Auditor    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False)
+    password = Column(String, nullable=False)
+    role = Column(String, nullable=False)  # Admin, Engineer, Auditor
 
+
+# ---------------- AUDIT LOG ----------------
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id = Column(Integer, primary_key=True)
-    action = Column(String)
-    user = Column(String)
-    timestamp = Column(String)    
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String, nullable=False)
+    user = Column(String, nullable=False)
+    timestamp = Column(String, nullable=False)

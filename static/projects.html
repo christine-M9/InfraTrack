@@ -6,122 +6,148 @@
 </head>
 <body>
 
-<div class="sidebar">
-<h2>KeNHA IMS</h2>
-<a href="/">Dashboard</a>
-<a href="/projects-page">Projects</a>
-<a href="/directorates-page">Directorates</a>
-<a href="/users-page">Users</a>
-<a href="/reports-page">Reports</a>
-</div>
+<div id="sidebar"></div>
 
 <div class="topbar">
-<h3>Projects</h3>
+    <h3>Projects</h3>
 </div>
 
 <div class="container">
 
-<div class="card">
-<h3>Add Project</h3>
+    <div class="card">
+        <h3>Add Project</h3>
+        <input id="name" placeholder="Project Name">
+        <select id="directorateSelect"></select>
+        <select id="contractorSelect"></select>
+        <input id="budget" type="number" placeholder="Budget">
+        <input id="spent" type="number" placeholder="Spent">
+        <button onclick="createProject()">Create</button>
+        <div id="message" style="margin-top:10px;"></div>
+    </div>
 
-<input id="name" placeholder="Project Name">
-
-<select id="directorateSelect"></select>
-<select id="contractorSelect"></select>
-
-<input id="budget" type="number" placeholder="Budget">
-<input id="spent" type="number" placeholder="Spent">
-
-<button onclick="createProject()">Create</button>
-</div>
-
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Budget</th>
-<th>Spent</th>
-<th>Progress</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody id="tableBody"></tbody>
-</table>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Budget</th>
+                <th>Spent</th>
+                <th>Progress</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
 
 </div>
 
 <script>
+const token = localStorage.getItem("token");
+const tableBody = document.getElementById("tableBody");
+const directorateSelect = document.getElementById("directorateSelect");
+const contractorSelect = document.getElementById("contractorSelect");
+const messageDiv = document.getElementById("message");
 
+// ---------------- Load directorates ----------------
 async function loadDirectorates(){
-const res = await fetch("/directorates")
-const data = await res.json()
-
-directorateSelect.innerHTML = data.map(d =>
-`<option value="${d.id}">${d.name}</option>`
-).join("")
+    const res = await fetch("/directorates", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const data = await res.json();
+    directorateSelect.innerHTML = data.map(d =>
+        `<option value="${d.id}">${d.name}</option>`
+    ).join("");
 }
 
+// ---------------- Load contractors ----------------
 async function loadContractors(){
-const res = await fetch("/contractors")
-const data = await res.json()
-
-contractorSelect.innerHTML = data.map(c =>
-`<option value="${c.id}">${c.name}</option>`
-).join("")
+    const res = await fetch("/contractors", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const data = await res.json();
+    contractorSelect.innerHTML = data.map(c =>
+        `<option value="${c.id}">${c.name}</option>`
+    ).join("");
 }
 
+// ---------------- Load projects ----------------
 async function loadProjects(){
-const res = await fetch("/projects")
-const data = await res.json()
-
-tableBody.innerHTML = ""
-
-data.forEach(p=>{
-tableBody.innerHTML += `
-<tr>
-<td>${p.name}</td>
-<td>${p.budget}</td>
-<td>${p.spent}</td>
-<td>${p.progress.toFixed(1)}%</td>
-<td><button onclick="deleteProject(${p.id})">Delete</button></td>
-</tr>`
-})
+    const res = await fetch("/projects", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const data = await res.json();
+    tableBody.innerHTML = "";
+    data.forEach(p => {
+        tableBody.innerHTML += `
+        <tr>
+            <td>${p.name}</td>
+            <td>${p.budget}</td>
+            <td>${p.spent}</td>
+            <td>${p.progress.toFixed(1)}%</td>
+            <td><button onclick="deleteProject(${p.id})">Delete</button></td>
+        </tr>`;
+    });
 }
 
 async function createProject(){
+    const project = {
+        name: document.getElementById("name").value,
+        budget: Number(document.getElementById("budget").value),
+        spent: Number(document.getElementById("spent").value),
+        directorate_id: Number(directorateSelect.value),
+        contractor_id: Number(contractorSelect.value),
+        status: "Active"   // <<< Add default status
+    };
 
-const project = {
-name: document.getElementById("name").value,
-budget: Number(document.getElementById("budget").value),
-spent: Number(document.getElementById("spent").value),
-directorate_id: Number(document.getElementById("directorateSelect").value),
-contractor_id: Number(document.getElementById("contractorSelect").value)
+    const res = await fetch("/projects", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify(project)
+    });
+
+    // Read body only once
+    let text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch(e){ data = { detail: text }; }
+
+    if(!res.ok){
+        messageDiv.style.color = "red";
+        messageDiv.innerText = "Error: " + (data.detail || "Unknown error");
+        return;
+    }
+
+    messageDiv.style.color = "green";
+    messageDiv.innerText = "Project created successfully!";
+    loadProjects();
 }
 
-const res = await fetch("/projects",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify(project)
-})
-
-if(!res.ok){
-const err = await res.text()
-alert("Error: " + err)
-return
-}
-
-loadProjects()
-}
-
+// ---------------- Delete project ----------------
 async function deleteProject(id){
-await fetch("/projects/"+id,{method:"DELETE"})
-loadProjects()
+    const res = await fetch("/projects/" + id, {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + token }
+    });
+    if(!res.ok){
+        let data;
+        try { data = await res.json(); }
+        catch(e){ data = {detail: await res.text()}; }
+        alert("Delete error: " + (data.detail || "Unknown"));
+        return;
+    }
+    loadProjects();
 }
 
-loadDirectorates()
-loadContractors()
-loadProjects()
-
+// ---------------- Init ----------------
+loadDirectorates();
+loadContractors();
+loadProjects();
+// Load the sidebar dynamically
+  fetch('/static/sidebar.html')
+    .then(response => response.text())
+    .then(html => document.getElementById('sidebar').innerHTML = html);
 </script>
 
 </body>

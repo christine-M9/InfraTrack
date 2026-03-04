@@ -1,7 +1,16 @@
 from pydantic import BaseModel
-from typing import Optional
 
-# -------- Directorate --------
+# ----------------- Auth -----------------
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+
+# ----------------- Project / Contractor / Directorate -----------------
+from typing import Optional
 
 class DirectorateBase(BaseModel):
     name: str
@@ -16,10 +25,8 @@ class DirectorateOut(BaseModel):
     total_budget: float
     completion_percent: float
     has_delayed: bool
-
     class Config:
         orm_mode = True
-# -------- Contractor --------
 
 class ContractorBase(BaseModel):
     name: str
@@ -31,13 +38,10 @@ class ContractorCreate(ContractorBase):
 class ContractorOut(BaseModel):
     id: int
     name: str
-    contact: str | None = None
+    contact: Optional[str] = None
     project_count: int
-
     class Config:
         orm_mode = True
-
-# -------- Project --------
 
 class ProjectBase(BaseModel):
     name: str
@@ -53,6 +57,5 @@ class ProjectOut(ProjectBase):
     id: int
     progress: float
     status: str
-
     class Config:
         orm_mode = True
