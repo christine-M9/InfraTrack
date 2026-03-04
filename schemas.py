@@ -1,51 +1,58 @@
 from pydantic import BaseModel
-from datetime import date
 from typing import Optional
 
-# ---------- PROJECT ----------
+# -------- Directorate --------
 
-class ProjectCreate(BaseModel):
+class DirectorateBase(BaseModel):
     name: str
-    contractor: str
-    location: str
-    deadline: date
-    budget: float
-    spent: float
 
+class DirectorateCreate(DirectorateBase):
+    pass
 
-class ProjectUpdate(BaseModel):
-    name: Optional[str] = None
-    contractor: Optional[str] = None
-    location: Optional[str] = None
-    deadline: Optional[date] = None
-    budget: Optional[float] = None
-    spent: Optional[float] = None
-    progress: Optional[float] = None
-
-class ProjectOut(BaseModel):
+class DirectorateOut(BaseModel):
     id: int
     name: str
-    contractor: str
-    location: str
-    deadline: date
-    progress: float
-    budget: float
-    spent: float
-    remaining: float
-    status: str
-    risk: str
+    project_count: int
+    total_budget: float
+    completion_percent: float
+    has_delayed: bool
+
+    class Config:
+        orm_mode = True
+# -------- Contractor --------
+
+class ContractorBase(BaseModel):
+    name: str
+    contact: Optional[str] = None
+
+class ContractorCreate(ContractorBase):
+    pass
+
+class ContractorOut(BaseModel):
+    id: int
+    name: str
+    contact: str | None = None
+    project_count: int
 
     class Config:
         orm_mode = True
 
+# -------- Project --------
 
-# ---------- USER ----------
+class ProjectBase(BaseModel):
+    name: str
+    budget: float
+    spent: float
+    directorate_id: int
+    contractor_id: int
 
-class UserCreate(BaseModel):
-    username: str
-    password: str
+class ProjectCreate(ProjectBase):
+    pass
 
+class ProjectOut(ProjectBase):
+    id: int
+    progress: float
+    status: str
 
-class UserLogin(BaseModel):
-    username: str
-    password: str
+    class Config:
+        orm_mode = True

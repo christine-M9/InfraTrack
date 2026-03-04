@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Directorates</title>
+<link rel="stylesheet" href="/static/layout.css">
+</head>
+<body>
+
+<div class="sidebar">
+<h2>KeNHA IMS</h2>
+<a href="/">Dashboard</a>
+<a href="/projects-page">Projects</a>
+<a href="/directorates-page">Directorates</a>
+<a href="/contractors-page">Contractors</a>
+<a href="/reports-page">Reports</a>
+</div>
+
+<div class="topbar">
+<h3>Directorates</h3>
+</div>
+
+<div class="container">
+
+<div class="card">
+<h3>Add Directorate</h3>
+<input id="dname" placeholder="Directorate Name">
+<button onclick="createDirectorate()">Create</button>
+</div>
+
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Projects</th>
+<th>Total Budget</th>
+<th>Completion %</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+
+</div>
+
+<script>
+
+async function loadDirectorates(){
+const res = await fetch("/directorates")
+const data = await res.json()
+
+tableBody.innerHTML = ""
+
+data.forEach(d => {
+
+let statusBadge = ""
+let rowClass = ""
+
+if(d.has_delayed){
+    statusBadge = "<span style='color:red;font-weight:bold;'>Delayed</span>"
+    rowClass = "style='background:#ffe5e5'"
+}else{
+    statusBadge = "<span style='color:green;'>Healthy</span>"
+}
+
+tableBody.innerHTML += `
+<tr ${rowClass}>
+<td>
+<a href="/directorate-projects-page?id=${d.id}">
+${d.name}
+</a>
+</td>
+<td>${d.project_count}</td>
+<td>${d.total_budget.toLocaleString()}</td>
+<td>${d.completion_percent.toFixed(1)}%</td>
+<td>${statusBadge}</td>
+</tr>
+`
+})
+}
+
+loadDirectorates()
+</script>
+
+</body>
+</html>

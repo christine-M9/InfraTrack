@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KeNHA Dashboard</title>
+<link rel="stylesheet" href="/static/layout.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="sidebar">
+<h2>KeNHA IMS</h2>
+<a href="/">Dashboard</a>
+<a href="/projects-page">Projects</a>
+<a href="/directorates-page">Directorates</a>
+<a href="/contractors-page">Contractors</a>
+<a href="/reports-page">Reports</a>
+</div>
+
+<div class="topbar">
+<h3>Infrastructure Monitoring System</h3>
+<span>Admin</span>
+</div>
+
+<div class="container">
+
+<div class="card">
+<h3>System Overview</h3>
+<p>Total Projects: <b id="totalProjects">0</b></p>
+<p>Active Projects: <b id="activeProjects">0</b></p>
+<p>Total Budget: <b id="totalBudget">0</b></p>
+</div>
+
+<div class="card">
+<canvas id="budgetChart"></canvas>
+</div>
+
+</div>
+
+<script>
+
+async function loadDashboard(){
+const res = await fetch("/projects")
+
+if(!res.ok){
+console.log("Failed to load projects")
+return
+}
+
+const data = await res.json()
+
+document.getElementById("totalProjects").innerText = data.length
+
+document.getElementById("activeProjects").innerText =
+data.filter(p => p.status === "Active").length
+
+document.getElementById("totalBudget").innerText =
+data.reduce((sum, p) => sum + p.budget, 0)
+
+new Chart(document.getElementById("budgetChart"),{
+type:"bar",
+data:{
+labels:data.map(p => p.name),
+datasets:[
+{label:"Budget", data:data.map(p => p.budget)},
+{label:"Spent", data:data.map(p => p.spent)}
+]
+}
+})
+}
+
+loadDashboard()
+
+</script>
+
+</body>
+</html>
