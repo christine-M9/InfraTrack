@@ -1,4 +1,3 @@
-# models.py
 from sqlalchemy import Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
@@ -11,7 +10,7 @@ class Directorate(Base):
     name = Column(String, unique=True, nullable=False)
 
     projects = relationship("Project", back_populates="directorate")
-
+    users = relationship("User", back_populates="directorate")  # Engineers linked to directorate
 
 # ---------------- CONTRACTOR ----------------
 class Contractor(Base):
@@ -19,10 +18,9 @@ class Contractor(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    contact = Column(String)  # <-- important to show on frontend
+    contact = Column(String)
 
     projects = relationship("Project", back_populates="contractor")
-
 
 # ---------------- PROJECT ----------------
 class Project(Base):
@@ -42,7 +40,6 @@ class Project(Base):
     directorate = relationship("Directorate", back_populates="projects")
     contractor = relationship("Contractor", back_populates="projects")
 
-
 # ---------------- USER ----------------
 class User(Base):
     __tablename__ = "users"
@@ -50,8 +47,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # Admin, Engineer, Auditor
+    role = Column(String, nullable=False)  # Admin, DirectorGeneral, Engineer
+    directorate_id = Column(Integer, ForeignKey("directorates.id"), nullable=True)  # only for Engineer
 
+    directorate = relationship("Directorate", back_populates="users")  # link to directorate
 
 # ---------------- AUDIT LOG ----------------
 class AuditLog(Base):

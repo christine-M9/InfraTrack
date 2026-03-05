@@ -127,7 +127,7 @@ background:#f8fafc;
 
 button{
 padding:8px 14px;
-background:#1d4ed8;
+background:#0f766e;
 color:white;
 border:none;
 border-radius:6px;
@@ -137,7 +137,7 @@ transition:0.3s;
 }
 
 button:hover{
-background:#1e40af;
+background:#0f766e;
 }
 
 /* ================= BADGES ================= */

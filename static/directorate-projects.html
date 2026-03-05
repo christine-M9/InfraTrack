@@ -1,149 +1,110 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>KeNHA IMS - Directorate Projects</title>
-<link rel="stylesheet" href="/static/layout.css">
-<style>
-.progress-bar { width:100%; background:#e2e8f0; border-radius:8px; overflow:hidden; height:15px; margin-bottom:5px; }
-.progress-fill { height:100%; background:#0f766e; }
-.modal { display:none; position:fixed; z-index:999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); }
-.modal-content { background:white; margin:10% auto; padding:20px; width:400px; border-radius:12px; }
-.close { float:right; cursor:pointer; font-size:20px; font-weight:bold; }
-.badge-warning { background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600; }
-.badge-success { background:#d1fae5;color:#065f46;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600; }
-.badge-danger { background:#fee2e2;color:#b91c1c;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600; }
-</style>
+    <title>KeNHA IMS - Directorate Projects</title>
+    <link rel="stylesheet" href="/static/layout.css">
+    <style>
+        .badge { padding: 3px 8px; border-radius: 4px; color: #fff; font-size: 0.8em; }
+        .badge-danger { background-color: #dc2626; }
+        .badge-success { background-color: #16a34a; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 8px 12px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #16a34a }
+        .container { padding: 20px; }
+        .card { padding: 15px; background: #f9fafb; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .topbar h3 { margin: 0; padding: 15px; background: #16a34a ; color: #fff; border-radius: 8px 8px 0 0; }
+    </style>
 </head>
 <body>
 
 <div id="sidebar"></div>
 
 <div class="topbar">
-<h3>Directorate Performance Analytics</h3>
-<button onclick="exportExcel()">Export to Excel</button>
+    <h3 id="directorateTitle">Directorate Projects</h3>
 </div>
 
 <div class="container">
-
-<div class="card">
-<input type="text" id="searchInput" placeholder="Search project..." onkeyup="applyFilters()">
-<select id="statusFilter" onchange="applyFilters()">
-<option value="All">All Status</option>
-<option value="Active">Active</option>
-<option value="Completed">Completed</option>
-<option value="Delayed">Delayed</option>
-</select>
-</div>
-
-<div class="card-grid">
-<div class="card"><h4>Total Projects</h4><p id="totalProjects">0</p></div>
-<div class="card"><h4>Total Budget (KES)</h4><p id="totalBudget">0</p></div>
-<div class="card"><h4>Completion</h4><p id="completionPercent">0%</p></div>
-<div class="card"><h4>Average Variance %</h4><p id="avgVariance">0%</p></div>
-</div>
-
-<div class="card">
-<table>
-<thead>
-<tr>
-<th onclick="sortTable('name')">Project</th>
-<th onclick="sortTable('contractor_name')">Contractor</th>
-<th onclick="sortTable('budget')">Budget</th>
-<th onclick="sortTable('spent')">Spent</th>
-<th>Variance %</th>
-<th>Progress</th>
-<th>Risk</th>
-<th>Status</th>
-</tr>
-</thead>
-<tbody id="tableBody"></tbody>
-</table>
-</div>
-
-</div>
-
-<div id="projectModal" class="modal">
-<div class="modal-content">
-<span class="close" onclick="closeModal()">&times;</span>
-<h3 id="modalTitle"></h3>
-<p id="modalDetails"></p>
-</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Contractor</th>
+                <th>Budget (KES)</th>
+                <th>Spent (KES)</th>
+                <th>Progress %</th>
+                <th>Status</th>
+                <th>Variance %</th>
+                <th>Risk Score</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
 </div>
 
 <script>
-const params = new URLSearchParams(window.location.search)
-const directorateId = params.get("id")
-let allProjects=[], sortDirection=1
+    // Load sidebar
+    fetch('/static/sidebar.html')
+        .then(response => response.text())
+        .then(html => document.getElementById('sidebar').innerHTML = html);
 
-async function loadProjects(){
-    const [projects, contractors] = await Promise.all([
-        fetch("/projects").then(r=>r.json()),
-        fetch("/contractors").then(r=>r.json())
-    ])
-    const contractorMap = {}
-    contractors.forEach(c=>contractorMap[c.id]=c.name)
-    allProjects = projects
-        .filter(p=>p.directorate_id==directorateId)
-        .map(p=>({...p, contractor_name:contractorMap[p.contractor_id]||"N/A"}))
-    applyFilters()
-}
+    // Read directorate ID from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const directorateId = urlParams.get('id');
+    const token = localStorage.getItem("token");
 
-function applyFilters(){
-    const search = document.getElementById("searchInput").value.toLowerCase()
-    const status = document.getElementById("statusFilter").value
-    const filtered = allProjects.filter(p=>p.name.toLowerCase().includes(search) && (status=="All"||p.status==status))
-    renderTable(filtered)
-}
+    if (!directorateId) {
+        alert("No directorate selected!");
+    }
 
-function renderTable(data){
-    let totalBudget=0,totalSpent=0,totalVariance=0
-    tableBody.innerHTML=""
-    data.forEach(p=>{
-        totalBudget+=p.budget
-        totalSpent+=p.spent
-        let variance=((p.spent-p.budget)/p.budget)*100
-        variance=isFinite(variance)?variance:0
-        totalVariance+=variance
-        let risk="Low", riskClass="badge-success"
-        if(variance>20){risk="High"; riskClass="badge-danger"}
-        else if(variance>5){risk="Medium"; riskClass="badge-warning"}
-        tableBody.innerHTML+=`
-        <tr onclick="openModal('${p.name}',${p.budget},${p.spent},'${p.status}','${p.contractor_name}')">
-        <td>${p.name}</td>
-        <td>${p.contractor_name}</td>
-        <td>${p.budget.toLocaleString()}</td>
-        <td>${p.spent.toLocaleString()}</td>
-        <td>${variance.toFixed(1)}%</td>
-        <td><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(p.progress,100)}%"></div></div>${p.progress.toFixed(1)}%</td>
-        <td><span class="badge ${riskClass}">${risk}</span></td>
-        <td>${p.status}</td>
-        </tr>`
-    })
-    document.getElementById("totalProjects").innerText=data.length
-    document.getElementById("totalBudget").innerText=totalBudget.toLocaleString()
-    document.getElementById("completionPercent").innerText=totalBudget>0?((totalSpent/totalBudget)*100).toFixed(1)+"%":"0%"
-    document.getElementById("avgVariance").innerText=data.length>0?(totalVariance/data.length).toFixed(1)+"%":"0%"
-}
+    async function loadProjects() {
+        if (!token) {
+            alert("You must login first!");
+            return;
+        }
 
-function sortTable(field){
-    sortDirection*=-1
-    allProjects.sort((a,b)=>{if(a[field]<b[field])return -1*sortDirection;if(a[field]>b[field])return 1*sortDirection;return 0})
-    applyFilters()
-}
+        const res = await fetch("/projects", {
+            headers: { "Authorization": "Bearer " + token }
+        });
 
-function openModal(name,budget,spent,status,contractor){
-    document.getElementById("modalTitle").innerText=name
-    document.getElementById("modalDetails").innerHTML=`Contractor: ${contractor}<br>Budget: ${budget.toLocaleString()}<br>Spent: ${spent.toLocaleString()}<br>Status: ${status}`
-    document.getElementById("projectModal").style.display="block"
-}
+        if (!res.ok) {
+            console.error("Failed to fetch projects:", res.status);
+            return;
+        }
 
-function closeModal(){document.getElementById("projectModal").style.display="none"}
-function exportExcel(){window.location.href=`/directorates/${directorateId}/export`}
-loadProjects()
-// Load the sidebar dynamically
-  fetch('/static/sidebar.html')
-    .then(response => response.text())
-    .then(html => document.getElementById('sidebar').innerHTML = html);
+        const projects = await res.json();
+        const tableBody = document.getElementById("tableBody");
+        tableBody.innerHTML = "";
+
+        // Filter projects by this directorate
+        const filtered = projects.filter(p => p.directorate_id == directorateId);
+        document.getElementById("directorateTitle").innerText = filtered.length > 0 
+            ? `${filtered[0].directorate} Projects` 
+            : "No projects for this directorate";
+
+        filtered.forEach(p => {
+            const statusBadge = p.status === "Delayed" 
+                ? "<span class='badge badge-danger'>Delayed</span>" 
+                : "<span class='badge badge-success'>Healthy</span>";
+
+            const variance = p.budget > 0 ? ((p.spent - p.budget)/p.budget*100).toFixed(1) : "0";
+
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${p.name}</td>
+                    <td>${p.contractor || "N/A"}</td>
+                    <td>${p.budget.toLocaleString()}</td>
+                    <td>${p.spent.toLocaleString()}</td>
+                    <td>${p.progress.toFixed(1)}%</td>
+                    <td>${statusBadge}</td>
+                    <td>${variance}%</td>
+                    <td>${p.risk_score}</td>
+                </tr>
+            `;
+        });
+    }
+
+    loadProjects();
 </script>
+
 </body>
 </html>

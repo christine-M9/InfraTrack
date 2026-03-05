@@ -40,11 +40,25 @@
 const params = new URLSearchParams(window.location.search)
 const contractorId = params.get("id")
 const contractorName = params.get("name")
+const token = localStorage.getItem("token")
+
+if (!token) {
+    alert("You must login first!");
+    window.location.href = "/login";
+}
 
 document.getElementById("pageTitle").innerText = `Projects for ${contractorName}`
 
 async function loadProjects(){
-    const res = await fetch("/projects")
+    const res = await fetch("/projects", {
+        headers: { "Authorization": "Bearer " + token }
+    })
+
+    if (!res.ok) {
+        console.error("Failed to fetch projects:", res.status);
+        return;
+    }
+
     const projects = await res.json()
     const filtered = projects.filter(p => p.contractor_id == contractorId)
     const tbody = document.getElementById("tableBody")
@@ -65,7 +79,7 @@ async function loadProjects(){
 loadProjects()
 
 // Load the sidebar dynamically
-  fetch('/static/sidebar.html')
+fetch('/static/sidebar.html')
     .then(response => response.text())
     .then(html => document.getElementById('sidebar').innerHTML = html);
 </script>

@@ -1,92 +1,131 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>KeNHA IMS - Directorates</title>
-<link rel="stylesheet" href="/static/layout.css">
+    <title>KeNHA IMS - Directorates</title>
+    <link rel="stylesheet" href="/static/layout.css">
+    <style>
+        .badge { padding: 3px 8px; border-radius: 4px; color: #fff; font-size: 0.8em; }
+        .badge-danger { background-color: #dc2626; }
+        .badge-success { background-color: #0f766e; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 8px 12px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #0f766e; }
+        .container { padding: 20px; }
+        .card { padding: 15px; background: #f9fafb; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .topbar h3 { margin: 0; padding: 15px; background: #0f766e; color: #fff; border-radius: 8px 8px 0 0; }
+        input { padding: 6px; width: 200px; margin-right: 10px; }
+        button { padding: 6px 12px; background-color: #0f766e; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0f766e; }
+    </style>
 </head>
 <body>
 
 <div id="sidebar"></div>
 
 <div class="topbar">
-<h3>Directorates Overview</h3>
+    <h3>Directorates Overview</h3>
 </div>
 
 <div class="container">
 
-<div class="card">
-<h3>Add Directorate</h3>
-<input id="dname" placeholder="Directorate Name">
-<button onclick="createDirectorate()">Create</button>
-</div>
+    <div class="card">
+        <h3>Add Directorate</h3>
+        <input id="dname" placeholder="Directorate Name">
+        <button onclick="createDirectorate()">Create</button>
+    </div>
 
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Projects</th>
-<th>Total Budget (KES)</th>
-<th>Completion %</th>
-<th>Status</th>
-</tr>
-</thead>
-<tbody id="tableBody"></tbody>
-</table>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Projects</th>
+                <th>Total Budget (KES)</th>
+                <th>Completion %</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
 
 </div>
 
 <script>
+    // Load sidebar
+    fetch('/static/sidebar.html')
+        .then(response => response.text())
+        .then(html => document.getElementById('sidebar').innerHTML = html);
 
-async function loadDirectorates(){
-const res = await fetch("/directorates")
-const data = await res.json()
+    async function loadDirectorates() {
+        const token = localStorage.getItem("token"); // must be set at login
+        if (!token) {
+            alert("You must login first!");
+            return;
+        }
 
-tableBody.innerHTML = ""
+        const res = await fetch("/directorates", {
+            headers: { "Authorization": "Bearer " + token }
+        });
 
-data.forEach(d => {
+        if (!res.ok) {
+            console.error("Failed to fetch directorates:", res.status);
+            return;
+        }
 
-let statusBadge = ""
+        const data = await res.json();
+        const tableBody = document.getElementById("tableBody");
+        tableBody.innerHTML = "";
 
-if(d.has_delayed){
-statusBadge = "<span class='badge badge-danger'>Delayed</span>"
-}else{
-statusBadge = "<span class='badge badge-success'>Healthy</span>"
-}
+        data.forEach(d => {
+            const statusBadge = d.has_delayed 
+                ? "<span class='badge badge-danger'>Delayed</span>" 
+                : "<span class='badge badge-success'>Healthy</span>";
 
-tableBody.innerHTML += `
-<tr>
-<td>
-<a href="/directorate-projects-page?id=${d.id}" style="text-decoration:none;color:#1d4ed8;font-weight:600;">
-${d.name}
-</a>
-</td>
-<td>${d.project_count}</td>
-<td>${d.total_budget.toLocaleString()}</td>
-<td>${d.completion_percent.toFixed(1)}%</td>
-<td>${statusBadge}</td>
-</tr>
-`
-})
-}
+            tableBody.innerHTML += `
+                <tr>
+                    <td>
+                        <a href="/directorate-projects-page?id=${d.id}" 
+                           style="text-decoration:none;color:#1d4ed8;font-weight:600;">
+                            ${d.name}
+                        </a>
+                    </td>
+                    <td>${d.project_count}</td>
+                    <td>${d.total_budget ? d.total_budget.toLocaleString() : "0"}</td>
+                    <td>${d.completion_percent ? d.completion_percent.toFixed(1) : "0"}%</td>
+                    <td>${statusBadge}</td>
+                </tr>
+            `;
+        });
+    }
 
-async function createDirectorate(){
-const name = document.getElementById("dname").value
+    async function createDirectorate() {
+        const name = document.getElementById("dname").value;
+        const token = localStorage.getItem("token");
 
-await fetch("/directorates",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({name:name})
-})
+        if (!name) {
+            alert("Enter directorate name");
+            return;
+        }
 
-document.getElementById("dname").value=""
-loadDirectorates()
-}
+        const res = await fetch("/directorates", {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify({ name: name })
+        });
 
-loadDirectorates()
-// Load the sidebar dynamically
-  fetch('/static/sidebar.html')
-    .then(response => response.text())
-    .then(html => document.getElementById('sidebar').innerHTML = html);
+        if (!res.ok) {
+            alert("Failed to create directorate. You might not have permission.");
+            return;
+        }
+
+        document.getElementById("dname").value = "";
+        loadDirectorates();
+    }
+
+    // Initial load
+    loadDirectorates();
 </script>
 
 </body>

@@ -10,6 +10,8 @@ import models, schemas
 from database import engine, SessionLocal
 from openpyxl import Workbook
 import io
+from sqlalchemy.orm import joinedload
+
 
 # ---------------- CREATE TABLES ----------------
 models.Base.metadata.create_all(bind=engine)
@@ -76,6 +78,7 @@ def create_default_admin():
 
 # ---------------- SCHEMAS FOR LOGIN/REGISTER ----------------
 from pydantic import BaseModel
+from typing import Optional
 
 class UserLogin(BaseModel):
     username: str
@@ -84,6 +87,8 @@ class UserLogin(BaseModel):
 class UserRegister(BaseModel):
     username: str
     password: str
+    role: Optional[str] = "Engineer"      # Admin, DirectorGeneral, Engineer
+    directorate_id: Optional[int] = None  # Only for Engineers
 
 # ---------------- LOGIN ----------------
 @app.post("/login")
@@ -93,12 +98,21 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     token = jwt.encode(
-        {"sub": user.username, "role": user.role, "exp": expire},
+        {
+            "sub": user.username,
+            "role": user.role,
+            "directorate_id": getattr(user, "directorate_id", None),
+            "exp": expire
+        },
         SECRET_KEY,
         algorithm=ALGORITHM
     )
     log_action(db, data.username, "Logged in")
-    return {"access_token": token, "role": user.role}
+    return {
+        "access_token": token,
+        "role": user.role,
+        "directorate_id": getattr(user, "directorate_id", None)
+    }
 
 # ---------------- REGISTER ----------------
 @app.post("/register")
@@ -108,7 +122,8 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     new_user = models.User(
         username=data.username,
         password=hash_password(data.password),
-        role="User"  # default role
+        role=data.role or "Engineer",
+        directorate_id=data.directorate_id
     )
     db.add(new_user)
     db.commit()
@@ -121,22 +136,36 @@ def home():
     return FileResponse("static/home.html")
 
 @app.get("/dashboard")
-def dashboard(): return FileResponse("static/dashboard.html")
-@app.get("/projects-page") 
-def projects_page(): return FileResponse("static/projects.html")
-@app.get("/directorates-page") 
-def directorates_page(): return FileResponse("static/directorates.html")
-@app.get("/contractors-page") 
-def contractors_page(): return FileResponse("static/contractors.html")
-@app.get("/reports-page") 
-def reports_page(): return FileResponse("static/reports.html")
-@app.get("/directorate-projects-page") 
-def directorate_projects_page(): return FileResponse("static/directorate-projects.html")
-@app.get("/contractor-projects-page") 
-def contractor_projects_page(): return FileResponse("static/contractor-projects.html")    
-@app.get("/audit-logs-page") 
-def audit_logs_page(): return FileResponse("static/audit-logs.html")
+def dashboard():
+    return FileResponse("static/dashboard.html")
 
+@app.get("/projects-page")
+def projects_page():
+    return FileResponse("static/projects.html")
+
+@app.get("/directorates-page")
+def directorates_page():
+    return FileResponse("static/directorates.html")
+
+@app.get("/contractors-page")
+def contractors_page():
+    return FileResponse("static/contractors.html")
+
+@app.get("/reports-page")
+def reports_page():
+    return FileResponse("static/reports.html")
+
+@app.get("/directorate-projects-page")
+def directorate_projects_page():
+    return FileResponse("static/directorate-projects.html")
+
+@app.get("/contractor-projects-page")
+def contractor_projects_page():
+    return FileResponse("static/contractor-projects.html")
+
+@app.get("/audit-logs-page")
+def audit_logs_page():
+    return FileResponse("static/audit-logs.html")
 # ---------------- CONTRACTORS ----------------
 @app.get("/contractors")
 def get_contractors(db: Session = Depends(get_db)):
@@ -153,8 +182,13 @@ def get_contractors(db: Session = Depends(get_db)):
 
 # ---------------- PROJECTS ----------------
 @app.get("/projects")
-def get_projects(db: Session = Depends(get_db)):
-    projects = db.query(models.Project).all()
+def get_projects(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if user["role"] == "Engineer":
+        projects = db.query(models.Project).filter(
+            models.Project.directorate_id == user.get("directorate_id")
+        ).all()
+    else:
+        projects = db.query(models.Project).all()
     result = []
     for p in projects:
         variance_percent = ((p.spent - p.budget)/p.budget*100) if p.budget>0 else 0
@@ -180,23 +214,22 @@ def get_projects(db: Session = Depends(get_db)):
 
 @app.post("/projects")
 def create_project(p: schemas.ProjectCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if user["role"] not in ["Admin","DirectorGeneral"]:
+        raise HTTPException(status_code=403, detail="Not authorized to create project")
     if not db.query(models.Directorate).get(p.directorate_id):
         raise HTTPException(status_code=400, detail="Invalid directorate ID")
     if p.contractor_id and not db.query(models.Contractor).get(p.contractor_id):
         raise HTTPException(status_code=400, detail="Invalid contractor ID")
-    
     progress = (p.spent / p.budget)*100 if p.budget > 0 else 0
-    
     project = models.Project(
         name=p.name,
         budget=p.budget,
         spent=p.spent,
         progress=progress,
-        status=getattr(p, "status", "Active"),  # default to Active
+        status=getattr(p, "status", "Active"),
         directorate_id=p.directorate_id,
         contractor_id=p.contractor_id
     )
-    
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -217,28 +250,38 @@ def delete_project(id: int, db: Session = Depends(get_db), user=Depends(get_curr
 
 # ---------------- DIRECTORATES ----------------
 @app.get("/directorates")
-def get_directorates(db: Session = Depends(get_db)):
-    directorates = db.query(models.Directorate).all()
+def get_directorates(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    # Load directorates with projects eagerly
+    query = db.query(models.Directorate).options(joinedload(models.Directorate.projects))
+    
+    # Filter for Engineers
+    if user["role"] == "Engineer":
+        query = query.filter(models.Directorate.id == user.get("directorate_id"))
+    
+    directorates = query.all()
+    
     result = []
     for d in directorates:
-        projects = d.projects
+        projects = d.projects  # Already loaded thanks to joinedload
         total_budget = sum(p.budget for p in projects)
         total_spent = sum(p.spent for p in projects)
-        completion_percent = (total_spent/total_budget*100) if total_budget>0 else 0
-        has_delayed = any(p.status=="Delayed" for p in projects)
+        completion_percent = (total_spent / total_budget * 100) if total_budget > 0 else 0
+        has_delayed = any(p.status == "Delayed" for p in projects)
         result.append({
             "id": d.id,
             "name": d.name,
             "project_count": len(projects),
             "total_budget": total_budget,
-            "completion_percent": completion_percent,
+            "completion_percent": round(completion_percent,2),
             "has_delayed": has_delayed
         })
     return result
 
 # ---------------- EXPORT EXCEL ----------------
 @app.get("/directorates/{id}/export")
-def export_directorate_excel(id:int, db: Session = Depends(get_db)):
+def export_directorate_excel(id:int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if user["role"] == "Engineer" and id != user.get("directorate_id"):
+        raise HTTPException(status_code=403, detail="Not authorized to export this directorate")
     projects = db.query(models.Project).filter(models.Project.directorate_id==id).all()
     wb = Workbook()
     ws = wb.active
@@ -263,7 +306,9 @@ def export_directorate_excel(id:int, db: Session = Depends(get_db)):
 
 # ---------------- AUDIT LOGS ----------------
 @app.get("/audit-logs")
-def get_audit_logs(db: Session = Depends(get_db)):
+def get_audit_logs(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if user["role"] != "Admin":
+        raise HTTPException(status_code=403, detail="Admin only")
     logs = db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).all()
     return [
         {"id": log.id, "user": log.user, "action": log.action, "timestamp": log.timestamp}
